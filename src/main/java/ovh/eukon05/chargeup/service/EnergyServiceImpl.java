@@ -6,6 +6,7 @@ import ovh.eukon05.chargeup.dto.OptimalChargeWindowResponseDTO;
 import ovh.eukon05.chargeup.exception.ApiFetchException;
 import ovh.eukon05.chargeup.model.DailyMix;
 import ovh.eukon05.chargeup.model.GenerationMix;
+import ovh.eukon05.chargeup.model.HourlyCleanMix;
 import ovh.eukon05.chargeup.model.HourlyMix;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
@@ -23,6 +24,7 @@ import java.util.stream.Collectors;
 @Service
 public class EnergyServiceImpl implements EnergyService {
     private static final String API_URL = "https://api.carbonintensity.org.uk/generation/%s/%s";
+    private static final List<String> CLEAN_SOURCES = List.of("wind", "solar", "nuclear", "biomass", "hydro");
     private final ObjectMapper mapper;
 
     @Override
@@ -35,7 +37,9 @@ public class EnergyServiceImpl implements EnergyService {
                     .flatMap(hourlyMix -> hourlyMix.generationMix().stream())
                     .collect(Collectors.groupingBy(GenerationMix::fuel, Collectors.averagingDouble(GenerationMix::perc)));
 
-            double cleanPerc = generationAvg.get("wind") + generationAvg.get("solar") + generationAvg.get("hydro") + generationAvg.get("biomass") + generationAvg.get("nuclear");
+            double cleanPerc = 0;
+            for (String source : CLEAN_SOURCES) cleanPerc += generationAvg.getOrDefault(source, 0.0);
+
             result.add(new DailyMix(date, generationAvg, cleanPerc));
         });
 
@@ -45,7 +49,48 @@ public class EnergyServiceImpl implements EnergyService {
 
     @Override
     public OptimalChargeWindowResponseDTO getOptimalChargeWindow(int windowLength) {
-        return null;
+        if (windowLength <= 0 || windowLength > 6) {
+            throw new RuntimeException("Invalid window length"); // as per task requirements, window between 1 and 6
+        }
+
+        Map<LocalDate, List<HourlyMix>> dailyMixes = getHourlyMixes();
+        List<HourlyCleanMix> measurements = dailyMixes.values().stream()
+                .flatMap(List::stream)
+                .filter(hourlyMix -> hourlyMix.from().toLocalDate().isAfter(LocalDate.now())) // as per task requirements, we skip to the next day
+                .map(hourlyMix -> new HourlyCleanMix(hourlyMix.from(), hourlyMix.to(),
+                        hourlyMix.generationMix().stream()
+                                .filter(genMix -> CLEAN_SOURCES.contains(genMix.fuel()))
+                                .mapToDouble(GenerationMix::perc)
+                                .sum())) //we calculate the sum of clean energy sources in the measurement
+                .sorted(Comparator.comparing(HourlyCleanMix::from))
+                .toList();
+
+        windowLength *= 2; // The data comes in 30-minute intervals, so we have to double the window length
+        double currMax = 0;
+        double currCheck;
+        LocalDateTime maxStart = measurements.getFirst().from();
+        LocalDateTime maxEnd = measurements.get(windowLength - 1).to();
+
+        if (windowLength > measurements.size()) {
+            throw new RuntimeException("Not enough measurements");
+        }
+
+        // init the sliding window with initial measurements
+        for (int i = 0; i < windowLength; i++) {
+            currMax += measurements.get(i).cleanPerc();
+        }
+
+        // sliding window alg - we move the window one measurement at a time and check if the new sum is greater than current
+        for (int i = windowLength; i < measurements.size(); i++) {
+            currCheck = currMax - measurements.get(i - windowLength).cleanPerc() + measurements.get(i).cleanPerc();
+            if (currCheck > currMax) {
+                currMax = currCheck;
+                maxStart = measurements.get(i - windowLength + 1).from();
+                maxEnd = measurements.get(i).to();
+            }
+        }
+
+        return new OptimalChargeWindowResponseDTO(maxStart, maxEnd, currMax / windowLength);
     }
 
     private Map<LocalDate, List<HourlyMix>> getHourlyMixes() {
