@@ -29,7 +29,7 @@ public class EnergyServiceImpl implements EnergyService {
 
     @Override
     public List<DailyMix> getCurrentMix() {
-        Map<LocalDate, List<HourlyMix>> dailyMixes = getHourlyMixes();
+        Map<LocalDate, List<HourlyMix>> dailyMixes = getHourlyMixes(LocalDateTime.now(), LocalDateTime.now().plusDays(2));
         List<DailyMix> result = new ArrayList<>();
 
         dailyMixes.forEach((date, mix) -> {
@@ -53,10 +53,9 @@ public class EnergyServiceImpl implements EnergyService {
             throw new RuntimeException("Invalid window length"); // as per task requirements, window between 1 and 6
         }
 
-        Map<LocalDate, List<HourlyMix>> dailyMixes = getHourlyMixes();
+        Map<LocalDate, List<HourlyMix>> dailyMixes = getHourlyMixes(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(2));
         List<HourlyCleanMix> measurements = dailyMixes.values().stream()
                 .flatMap(List::stream)
-                .filter(hourlyMix -> hourlyMix.from().toLocalDate().isAfter(LocalDate.now())) // as per task requirements, we skip to the next day
                 .map(hourlyMix -> new HourlyCleanMix(hourlyMix.from(), hourlyMix.to(),
                         hourlyMix.generationMix().stream()
                                 .filter(genMix -> CLEAN_SOURCES.contains(genMix.fuel()))
@@ -93,11 +92,8 @@ public class EnergyServiceImpl implements EnergyService {
         return new OptimalChargeWindowResponseDTO(maxStart, maxEnd, currMax / windowLength);
     }
 
-    private Map<LocalDate, List<HourlyMix>> getHourlyMixes() {
-        LocalDateTime today = LocalDateTime.now();
-        LocalDateTime endDate = today.plusDays(2);
-
-        HttpRequest request = HttpRequest.newBuilder().uri(URI.create(String.format(API_URL, today, endDate))).build();
+    private Map<LocalDate, List<HourlyMix>> getHourlyMixes(LocalDateTime start, LocalDateTime end) {
+        HttpRequest request = HttpRequest.newBuilder().uri(URI.create(String.format(API_URL, start, end))).build();
         HttpResponse<String> res;
 
         try (HttpClient client = HttpClient.newHttpClient()) {
