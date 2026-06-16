@@ -3,7 +3,7 @@ package ovh.eukon05.chargeup.client;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import ovh.eukon05.chargeup.exception.ApiFetchException;
-import ovh.eukon05.chargeup.model.HourlyMix;
+import ovh.eukon05.chargeup.model.MixInterval;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
 
@@ -24,7 +24,7 @@ public class ApiClientImpl implements ApiClient {
     private static final String API_URL = "https://api.carbonintensity.org.uk/generation/%sZ/%sZ";
     private final ObjectMapper mapper;
 
-    public Map<LocalDate, List<HourlyMix>> getHourlyMixes(LocalDateTime start, LocalDateTime end) {
+    public Map<LocalDate, List<MixInterval>> getIntervals(LocalDateTime start, LocalDateTime end) {
         HttpRequest request = HttpRequest.newBuilder().uri(URI.create(String.format(API_URL, start, end))).build();
         HttpResponse<String> res;
 
@@ -37,7 +37,7 @@ public class ApiClientImpl implements ApiClient {
         ArrayNode dataNode = mapper.readTree(res.body()).get("data").asArray();
 
         return dataNode.valueStream()
-                .map(node -> mapper.treeToValue(node, HourlyMix.class))
+                .map(node -> mapper.treeToValue(node, MixInterval.class))
                 .collect(Collectors.groupingBy(mix -> mix.from().toLocalDate(), HashMap::new, Collectors.toList()));
     }
 }
