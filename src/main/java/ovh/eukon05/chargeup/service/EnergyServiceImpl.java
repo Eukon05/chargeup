@@ -56,8 +56,8 @@ public class EnergyServiceImpl implements EnergyService {
             throw new IllegalArgumentException("Invalid window length"); // as per task requirements, window between 1 and 6
         }
 
-        LocalDateTime start = LocalDateTime.now().plusDays(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-        LocalDateTime end = start.plusDays(2).withHour(23).withMinute(59).withSecond(59);
+        LocalDateTime start = LocalDateTime.now().plusDays(1).withHour(0).withMinute(1).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusDays(1).withHour(23).withMinute(59).withSecond(59);
 
         Map<LocalDate, List<MixInterval>> intervals = apiClient.getIntervals(start, end);
         List<CleanMixInterval> cleanIntervals = intervals.values().stream()
@@ -71,23 +71,23 @@ public class EnergyServiceImpl implements EnergyService {
                 .toList();
 
         windowLength *= 2; // The data comes in 30-minute intervals, so we have to double the window length
+
+        if (windowLength > cleanIntervals.size()) throw new IllegalArgumentException("Not enough measurements");
+
         double currMax = 0;
-        double currCheck;
         LocalDateTime maxStart = cleanIntervals.getFirst().from();
         LocalDateTime maxEnd = cleanIntervals.get(windowLength - 1).to();
-
-        if (windowLength > cleanIntervals.size()) {
-            throw new IllegalArgumentException("Not enough measurements");
-        }
 
         // init the sliding window with initial measurements
         for (int i = 0; i < windowLength; i++) {
             currMax += cleanIntervals.get(i).cleanPerc();
         }
 
+        double currCheck = currMax;
+
         // sliding window alg - we move the window one measurement at a time and check if the new sum is greater than current
         for (int i = windowLength; i < cleanIntervals.size(); i++) {
-            currCheck = currMax - cleanIntervals.get(i - windowLength).cleanPerc() + cleanIntervals.get(i).cleanPerc();
+            currCheck = currCheck - cleanIntervals.get(i - windowLength).cleanPerc() + cleanIntervals.get(i).cleanPerc();
             if (currCheck > currMax) {
                 currMax = currCheck;
                 maxStart = cleanIntervals.get(i - windowLength + 1).from();
