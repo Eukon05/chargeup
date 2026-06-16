@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class EnergyServiceTests {
     private final ApiClient client = Mockito.mock(ApiClient.class);
@@ -39,12 +40,16 @@ class EnergyServiceTests {
         DailyMix mix = service.getCurrentMix().mixes().getFirst();
 
         assertEquals(LocalDate.now(), mix.date());
+
+        // These are the averages for each source in the day (og value divided by 2 since we only have two measurements in this test)
         assertEquals(27.5, mix.sourceMix().get("wind"));
         assertEquals(15.0, mix.sourceMix().get("solar"));
         assertEquals(5.0, mix.sourceMix().get("biomass"));
         assertEquals(10.0, mix.sourceMix().get("coal"));
         assertEquals(20.0, mix.sourceMix().get("hydro"));
         assertEquals(22.5, mix.sourceMix().get("gas"));
+
+        // This is the average of all clean sources in the day
         assertEquals(67.5, mix.cleanPerc());
     }
 
@@ -70,7 +75,13 @@ class EnergyServiceTests {
         // Average share during this window: (90 + 80) / 2 = 85
         assertEquals(start.plusMinutes(60), result.from());
         assertEquals(start.plusMinutes(120), result.to());
-        assertEquals(85.0, result.cleanEnergyShare());
+        assertEquals(85.0, result.cleanPerc());
     }
 
+    @Test
+    void should_throw_when_window_out_of_range() {
+        assertThrows(IllegalArgumentException.class, () -> service.getOptimalChargeWindow(-1));
+        assertThrows(IllegalArgumentException.class, () -> service.getOptimalChargeWindow(0));
+        assertThrows(IllegalArgumentException.class, () -> service.getOptimalChargeWindow(7));
+    }
 }
