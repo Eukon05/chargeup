@@ -2,34 +2,34 @@ package ovh.eukon05.chargeup.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import ovh.eukon05.chargeup.client.ApiClient;
+import ovh.eukon05.chargeup.dto.CurrentMixResponseDTO;
 import ovh.eukon05.chargeup.dto.OptimalChargeWindowResponseDTO;
-import ovh.eukon05.chargeup.exception.ApiFetchException;
 import ovh.eukon05.chargeup.model.DailyMix;
 import ovh.eukon05.chargeup.model.GenerationMix;
 import ovh.eukon05.chargeup.model.HourlyCleanMix;
 import ovh.eukon05.chargeup.model.HourlyMix;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.node.ArrayNode;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 @Service
 public class EnergyServiceImpl implements EnergyService {
-    private static final String API_URL = "https://api.carbonintensity.org.uk/generation/%s/%s";
     private static final List<String> CLEAN_SOURCES = List.of("wind", "solar", "nuclear", "biomass", "hydro");
-    private final ObjectMapper mapper;
+    private final ApiClient apiClient;
 
     @Override
-    public List<DailyMix> getCurrentMix() {
-        Map<LocalDate, List<HourlyMix>> dailyMixes = getHourlyMixes(LocalDateTime.now(), LocalDateTime.now().plusDays(2));
+    public CurrentMixResponseDTO getCurrentMix() {
+        LocalDateTime start = LocalDateTime.now().withHour(0).withMinute(1).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusDays(2).withHour(23).withMinute(59).withSecond(59);
+
+        Map<LocalDate, List<HourlyMix>> dailyMixes = apiClient.getHourlyMixes(start, end);
         List<DailyMix> result = new ArrayList<>();
 
         dailyMixes.forEach((date, mix) -> {
@@ -44,16 +44,19 @@ public class EnergyServiceImpl implements EnergyService {
         });
 
         result.sort(Comparator.comparing(DailyMix::date));
-        return result;
+        return new CurrentMixResponseDTO(result);
     }
 
     @Override
     public OptimalChargeWindowResponseDTO getOptimalChargeWindow(int windowLength) {
         if (windowLength <= 0 || windowLength > 6) {
-            throw new RuntimeException("Invalid window length"); // as per task requirements, window between 1 and 6
+            throw new IllegalArgumentException("Invalid window length"); // as per task requirements, window between 1 and 6
         }
 
-        Map<LocalDate, List<HourlyMix>> dailyMixes = getHourlyMixes(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(2));
+        LocalDateTime start = LocalDateTime.now().plusDays(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime end = start.plusDays(2).withHour(23).withMinute(59).withSecond(59);
+
+        Map<LocalDate, List<HourlyMix>> dailyMixes = apiClient.getHourlyMixes(start, end);
         List<HourlyCleanMix> measurements = dailyMixes.values().stream()
                 .flatMap(List::stream)
                 .map(hourlyMix -> new HourlyCleanMix(hourlyMix.from(), hourlyMix.to(),
@@ -71,7 +74,7 @@ public class EnergyServiceImpl implements EnergyService {
         LocalDateTime maxEnd = measurements.get(windowLength - 1).to();
 
         if (windowLength > measurements.size()) {
-            throw new RuntimeException("Not enough measurements");
+            throw new IllegalArgumentException("Not enough measurements");
         }
 
         // init the sliding window with initial measurements
@@ -90,22 +93,5 @@ public class EnergyServiceImpl implements EnergyService {
         }
 
         return new OptimalChargeWindowResponseDTO(maxStart, maxEnd, currMax / windowLength);
-    }
-
-    private Map<LocalDate, List<HourlyMix>> getHourlyMixes(LocalDateTime start, LocalDateTime end) {
-        HttpRequest request = HttpRequest.newBuilder().uri(URI.create(String.format(API_URL, start, end))).build();
-        HttpResponse<String> res;
-
-        try (HttpClient client = HttpClient.newHttpClient()) {
-            res = client.send(request, HttpResponse.BodyHandlers.ofString());
-        } catch (Exception e) {
-            throw new ApiFetchException();
-        }
-
-        ArrayNode dataNode = mapper.readTree(res.body()).get("data").asArray();
-
-        return dataNode.valueStream()
-                .map(node -> mapper.treeToValue(node, HourlyMix.class))
-                .collect(Collectors.groupingBy(mix -> mix.from().toLocalDate(), HashMap::new, Collectors.toList()));
     }
 }
