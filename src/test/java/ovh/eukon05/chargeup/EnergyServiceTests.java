@@ -1,6 +1,8 @@
 package ovh.eukon05.chargeup;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import ovh.eukon05.chargeup.client.ApiClient;
 import ovh.eukon05.chargeup.dto.OptimalChargeWindowResponseDTO;
@@ -79,9 +81,28 @@ class EnergyServiceTests {
     }
 
     @Test
-    void should_throw_when_window_out_of_range() {
-        assertThrows(IllegalArgumentException.class, () -> service.getOptimalChargeWindow(-1));
-        assertThrows(IllegalArgumentException.class, () -> service.getOptimalChargeWindow(0));
-        assertThrows(IllegalArgumentException.class, () -> service.getOptimalChargeWindow(7));
+    void should_return_window_passing_midnight() {
+        LocalDateTime start = LocalDateTime.now().plusDays(1).withHour(23).withMinute(30).withSecond(0).withNano(0);
+
+        List<MixInterval> mixes = new ArrayList<>();
+        mixes.add(new MixInterval(start, start.plusMinutes(30), List.of(new GenerationMix("wind", 100.0))));
+        mixes.add(new MixInterval(start.plusMinutes(30), start.plusMinutes(60), List.of(new GenerationMix("wind", 100.0))));
+        mixes.add(new MixInterval(start.plusMinutes(60), start.plusMinutes(90), List.of(new GenerationMix("wind", 80.0), new GenerationMix("coal", 20.0))));
+        mixes.add(new MixInterval(start.plusMinutes(90), start.plusMinutes(120), List.of(new GenerationMix("wind", 90.0), new GenerationMix("coal", 10.0))));
+
+        Map<LocalDate, List<MixInterval>> testData = Map.of(start.toLocalDate(), mixes);
+        Mockito.when(client.getIntervals(Mockito.any(), Mockito.any())).thenReturn(testData);
+
+        OptimalChargeWindowResponseDTO result = service.getOptimalChargeWindow(1);
+
+        assertEquals(start, result.from());
+        assertEquals(start.plusMinutes(60), result.to());
+        assertEquals(100, result.cleanPerc());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {-1, 0, 7})
+    void should_throw_when_window_out_of_range(int window) {
+        assertThrows(IllegalArgumentException.class, () -> service.getOptimalChargeWindow(window));
     }
 }

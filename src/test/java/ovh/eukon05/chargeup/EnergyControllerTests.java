@@ -1,6 +1,8 @@
 package ovh.eukon05.chargeup;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -35,24 +37,26 @@ class EnergyControllerTests {
                 .andExpect(jsonPath("$.mixes[2].cleanPerc").isNumber());
     }
 
-    @Test
-    void should_get_optimal_charge_window() throws Exception {
-        mockMvc.perform(get("/api/v1/energy/window?windowLength=3"))
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 3, 4, 5, 6})
+    void should_get_optimal_charge_window(int windowLength) throws Exception {
+        mockMvc.perform(get("/api/v1/energy/window?windowLength=" + windowLength))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.from").exists())
                 .andExpect(jsonPath("$.to").exists())
                 .andExpect(jsonPath("$.cleanPerc").isNotEmpty());
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {-1, 0, 7})
+    void should_reject_invalid_charge_window_length(int window) throws Exception {
+        mockMvc.perform(get("/api/v1/energy/window?windowLength=" + window))
+                .andExpect(status().isBadRequest());
+    }
+
     @Test
-    void should_reject_invalid_charge_window_length() throws Exception {
-        mockMvc.perform(get("/api/v1/energy/window?windowLength=-1"))
-                .andExpect(status().isBadRequest());
-
-        mockMvc.perform(get("/api/v1/energy/window?windowLength=0"))
-                .andExpect(status().isBadRequest());
-
-        mockMvc.perform(get("/api/v1/energy/window?windowLength=7"))
+    void should_reject_missing_charge_window_length() throws Exception {
+        mockMvc.perform(get("/api/v1/energy/window"))
                 .andExpect(status().isBadRequest());
     }
 }
