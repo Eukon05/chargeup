@@ -34,6 +34,8 @@ public class ApiClientImpl implements ApiClient {
             throw new ApiFetchException();
         }
 
+        if (res.statusCode() != 200) throw new ApiFetchException();
+
         ArrayNode dataNode = mapper.readTree(res.body()).get("data").asArray();
 
         return dataNode.valueStream()

@@ -1,6 +1,7 @@
 package ovh.eukon05.chargeup.exception;
 
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -12,7 +13,7 @@ import java.util.Map;
 public class GlobalExceptionHandler {
     @ExceptionHandler(ApiFetchException.class)
     public ResponseEntity<String> handleIOException(ApiFetchException e) {
-        return ResponseEntity.badRequest().body(e.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(e.getMessage());
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
