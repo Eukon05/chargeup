@@ -4,9 +4,9 @@ An API for monitoring the energy mix in Great Britain for the optimal time to ch
 
 ## Live demo
 
-The API is available at: https://chargeup-backend.onrender.com  
+The API is available at: https://chargeup.eukon05.ovh  
 Documentation and interactive playground are available
-at: https://chargeup-backend.onrender.com/api/v1/swagger-ui/index.html
+at: https://chargeup.eukon05.ovh/api/v1/swagger-ui/index.html
 
 ## Functionality
 
